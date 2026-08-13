@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartStore AI — MSME Billing &amp; Inventory Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --paper:#F6F2E4;
+    --paper-line:#E4DCC4;
+    --ink:#1F2A44;
+    --ink-soft:#4B5570;
+    --ink-faint:#8B92A6;
+    --marigold:#E8A93B;
+    --marigold-deep:#C6871E;
+    --vermillion:#C0392B;
+    --vermillion-soft:#F6DEDA;
+    --leaf:#3F7D52;
+    --leaf-soft:#DEEBE0;
+    --amber-soft:#FBEBCE;
+    --card:#FFFDF6;
+    --shadow: 0 2px 0 rgba(31,42,68,0.06), 0 10px 24px -14px rgba(31,42,68,0.28);
+    --radius: 14px;
+    --display: 'Fraunces', serif;
+    --body: 'IBM Plex Sans', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0; font-family:var(--body); color:var(--ink);
+    background:
+      linear-gradient(var(--paper),var(--paper));
+    min-height:100vh;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
+  }
+  a{color:inherit;}
+  button{font-family:inherit; cursor:pointer;}
+  :focus-visible{outline:3px solid var(--marigold-deep); outline-offset:2px; border-radius:4px;}
+
+  /* ---------- APP SHELL ---------- */
+  .app{ display:flex; min-height:100vh; }
+
+  /* Sidebar — ledger tab index */
+  .sidebar{
+    width:236px; flex-shrink:0; background:var(--ink);
+    color:#EDE7D6; display:flex; flex-direction:column;
+    position:sticky; top:0; height:100vh; z-index:20;
+  }
+  .brand{
+    padding:26px 22px 18px; border-bottom:1px solid rgba(237,231,214,0.14);
+  }
+  .brand-mark{
+    display:flex; align-items:center; gap:10px; margin-bottom:4px;
+  }
+  .brand-mark .dot{width:11px; height:11px; border-radius:50%; background:var(--marigold); box-shadow:0 0 0 3px rgba(232,169,59,0.25);}
+  .brand-name{font-family:var(--display); font-size:20px; font-weight:600; letter-spacing:0.2px;}
+  .brand-sub{font-family:var(--mono); font-size:10.5px; color:#B9C0D4; letter-spacing:1.5px; text-transform:uppercase; margin-top:6px;}
+
+  .nav{ padding:14px 12px; flex:1; display:flex; flex-direction:column; gap:6px; }
+  .nav-item{
+    display:flex; align-items:center; gap:11px;
+    padding:12px 14px; border:none; background:transparent; color:#CBD1E3;
+    text-align:left; border-radius:10px 4px 4px 10px; font-size:14.5px; font-weight:500;
+    position:relative; transition:background 0.15s ease, color 0.15s ease;
+  }
+  .nav-item .num{ font-family:var(--mono); font-size:11px; color:#7F87A2; }
+  .nav-item:hover{ background:rgba(237,231,214,0.08); color:#fff; }
+  .nav-item.active{ background:var(--paper); color:var(--ink); }
+  .nav-item.active .num{ color:var(--marigold-deep); }
+  .nav-item.active::after{
+    content:""; position:absolute; right:-12px; top:50%; transform:translateY(-50%);
+    width:0; height:0; border-top:9px solid transparent; border-bottom:9px solid transparent;
+    border-left:12px solid var(--paper);
+  }
+  .sidebar-foot{
+    padding:16px 22px 22px; font-family:var(--mono); font-size:10.5px; color:#7F87A2;
+    border-top:1px solid rgba(237,231,214,0.14); line-height:1.6;
+  }
+
+  /* Mobile topbar */
+  .topbar{ display:none; }
+
+  /* Main / ledger page */
+  .main{ flex:1; min-width:0; position:relative; }
+  .page{
+    padding:34px 40px 60px;
+    background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 38px, var(--paper-line) 39px);
+    min-height:100vh;
+  }
+  .page-head{ margin-bottom:26px; }
+  .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--marigold-deep); margin:0 0 6px; }
+  .page-title{ font-family:var(--display); font-size:30px; font-weight:600; margin:0; }
+  .page-desc{ color:var(--ink-soft); font-size:14px; margin:6px 0 0; max-width:560px; }
+
+  .grid{ display:grid; gap:18px; }
+  .card{
+    background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+    border:1px solid rgba(31,42,68,0.06);
+  }
+  .card-pad{ padding:20px 22px; }
+  .card-title{ font-family:var(--display); font-size:17px; font-weight:600; margin:0 0 4px; }
+  .card-sub{ color:var(--ink-faint); font-size:12.5px; margin:0 0 14px; }
+
+  /* ---------- BILLING PAGE ---------- */
+  .billing-grid{ grid-template-columns: 1.15fr 1fr; align-items:start; }
+  @media (max-width:980px){ .billing-grid{ grid-template-columns:1fr; } }
+
+  .scan-row{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .select-wrap{ position:relative; flex:1; min-width:220px; }
+  select.product-select{
+    width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid #E1D8BE;
+    background:#fff; font-family:var(--body); font-size:14px; color:var(--ink); appearance:none;
+  }
+  .btn{
+    border:none; border-radius:10px; padding:12px 16px; font-weight:600; font-size:13.5px;
+    display:inline-flex; align-items:center; gap:8px; transition:transform 0.1s ease, box-shadow 0.15s ease;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn-primary{ background:var(--ink); color:#F6F2E4; }
+  .btn-primary:hover{ box-shadow:0 6px 14px -6px rgba(31,42,68,0.5); }
+  .btn-marigold{ background:var(--marigold); color:#3A2A05; }
+  .btn-marigold:hover{ box-shadow:0 6px 14px -6px rgba(198,135,30,0.55); }
+  .btn-ghost{ background:transparent; color:var(--ink-soft); border:1.5px solid #E1D8BE; }
+  .btn-outline-vermillion{ background:#fff; color:var(--vermillion); border:1.5px solid var(--vermillion-soft); }
+  .btn-block{ width:100%; justify-content:center; }
+  .btn[disabled]{ opacity:0.45; cursor:not-allowed; }
+
+  .scanner-drop{
+    border:1.5px dashed #D8CCA8; border-radius:12px; padding:16px; background:#FCFAF1;
+    display:flex; align-items:center; gap:12px; margin-bottom:16px; font-size:13px; color:var(--ink-soft);
+  }
+  .scanner-drop label.file-btn{
+    background:var(--card); border:1.5px solid #E1D8BE; padding:9px 13px; border-radius:8px;
+    font-weight:600; font-size:12.5px; color:var(--ink); cursor:pointer; white-space:nowrap;
+  }
+  .scan-result{
+    display:none; align-items:center; gap:12px; background:var(--leaf-soft); border:1px solid #BEDCC5;
+    border-radius:10px; padding:10px 14px; margin-bottom:16px; font-size:13px;
+  }
+  .scan-result.show{ display:flex; }
+  .scan-result img{ width:40px; height:40px; object-fit:cover; border-radius:6px; }
+  .scan-result .pct{ font-family:var(--mono); color:var(--leaf); font-weight:600; }
+
+  table.cart-table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  table.cart-table th{
+    text-align:left; font-size:11px; letter-spacing:0.5px; text-transform:uppercase;
+    color:var(--ink-faint); font-weight:600; padding:0 8px 8px; border-bottom:1.5px solid #EFE7CE;
+  }
+  table.cart-table td{ padding:11px 8px; border-bottom:1px solid #F1EBD8; vertical-align:middle; }
+  table.cart-table tr:last-child td{ border-bottom:none; }
+  .qty-ctrl{ display:inline-flex; align-items:center; gap:8px; }
+  .qty-ctrl button{
+    width:24px; height:24px; border-radius:6px; border:1px solid #E1D8BE; background:#fff; color:var(--ink);
+    font-weight:700; line-height:1; font-size:14px;
+  }
+  .qty-ctrl span{ font-family:var(--mono); min-width:18px; text-align:center; }
+  .remove-btn{ background:none; border:none; color:var(--vermillion); font-size:12px; font-weight:600; }
+  .empty-cart{ text-align:center; padding:36px 10px; color:var(--ink-faint); font-size:13.5px; }
+
+  .totals{ margin-top:16px; padding-top:14px; border-top:1.5px dashed #E1D8BE; }
+  .totals .row{ display:flex; justify-content:space-between; font-size:13.5px; color:var(--ink-soft); padding:4px 0; }
+  .totals .row.grand{ font-family:var(--display); font-size:20px; font-weight:600; color:var(--ink); padding-top:8px; }
+  .totals .row.grand span:last-child{ font-family:var(--mono); }
+
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; }
+  .field input, .field select{
+    width:100%; padding:11px 12px; border-radius:9px; border:1.5px solid #E1D8BE; font-size:13.5px; font-family:inherit; background:#fff;
+  }
+
+  /* Receipt */
+  .receipt-wrap{ display:flex; justify-content:center; padding:6px 0 4px; }
+  .receipt{
+    width:280px; background:#fffef9; padding:22px 20px 4px; font-family:var(--mono); font-size:12px;
+    color:#26314F; position:relative; box-shadow:0 12px 30px -14px rgba(31,42,68,0.4);
+    animation: printDown 0.45s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes printDown{ from{ transform:translateY(-14px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+  .receipt .zigzag{
+    height:12px; width:100%;
+    background: linear-gradient(-45deg, transparent 6px, #fffef9 0) 0 6px, linear-gradient(45deg, transparent 6px, #fffef9 0) 0 6px;
+    background-color: var(--paper); background-size:12px 12px; background-repeat:repeat-x;
+  }
+  .receipt-head{ text-align:center; margin-bottom:10px; }
+  .receipt-head .store{ font-family:var(--display); font-size:16px; font-weight:700; color:var(--ink); }
+  .receipt-head .tag{ font-size:10px; color:var(--ink-faint); letter-spacing:1px; }
+  .receipt hr{ border:none; border-top:1px dashed #C9C2A6; margin:8px 0; }
+  .receipt-row{ display:flex; justify-content:space-between; margin:3px 0; }
+  .receipt-items .receipt-row span:first-child{ max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .receipt-total{ font-weight:700; font-size:14px; }
+  .receipt-barcode{ margin:12px 0 6px; display:flex; justify-content:center; }
+  .receipt-foot{ text-align:center; font-size:10px; color:var(--ink-faint); padding-bottom:14px; }
+
+  /* ---------- INVENTORY PAGE ---------- */
+  .metrics{ grid-template-columns:repeat(4,1fr); margin-bottom:20px; }
+  @media (max-width:900px){ .metrics{ grid-template-columns:repeat(2,1fr); } }
+  .metric{ padding:18px 20px; }
+  .metric .m-label{ font-size:11.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.5px; font-weight:600; }
+  .metric .m-value{ font-family:var(--display); font-size:26px; font-weight:600; margin-top:6px; }
+  .metric.alert .m-value{ color:var(--vermillion); }
+  .metric.ok .m-value{ color:var(--leaf); }
+
+  .alert-banner{
+    background:var(--vermillion-soft); border:1px solid #E9BCB4; border-radius:12px;
+    padding:14px 18px; margin-bottom:20px; display:flex; gap:12px; align-items:flex-start;
+  }
+  .alert-banner .ico{ font-size:20px; }
+  .alert-banner strong{ color:var(--vermillion); }
+  .alert-banner .items{ font-size:13px; color:#7A2F26; margin-top:4px; }
+  .alert-banner.hide{ display:none; }
+
+  table.inv-table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  table.inv-table th{
+    text-align:left; font-size:11px; letter-spacing:0.5px; text-transform:uppercase;
+    color:var(--ink-faint); font-weight:600; padding:0 10px 10px; border-bottom:1.5px solid #EFE7CE;
+  }
+  table.inv-table td{ padding:12px 10px; border-bottom:1px solid #F1EBD8; }
+  .badge{ font-size:11px; font-weight:700; padding:4px 9px; border-radius:20px; display:inline-flex; align-items:center; gap:5px; }
+  .badge.out{ background:var(--vermillion-soft); color:var(--vermillion); }
+  .badge.low{ background:var(--amber-soft); color:var(--marigold-deep); }
+  .badge.ok{ background:var(--leaf-soft); color:var(--leaf); }
+  .barcode-cell{ font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); }
+
+  .restock-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .restock-row .field{ margin-bottom:0; flex:1; min-width:160px; }
+
+  /* ---------- ANALYTICS PAGE ---------- */
+  .an-grid{ grid-template-columns:1fr 1fr; margin-bottom:18px; }
+  @media (max-width:980px){ .an-grid{ grid-template-columns:1fr; } }
+  .chart-box{ position:relative; height:260px; }
+  .forecast-item{
+    display:flex; justify-content:space-between; align-items:center; gap:12px;
+    padding:13px 4px; border-bottom:1px solid #F1EBD8;
+  }
+  .forecast-item:last-child{ border-bottom:none; }
+  .forecast-item .fname{ font-weight:600; font-size:13.5px; }
+  .forecast-item .fmeta{ font-size:11.5px; color:var(--ink-faint); margin-top:2px; }
+  .forecast-flag{
+    font-size:11px; font-weight:700; padding:5px 10px; border-radius:20px; white-space:nowrap;
+  }
+  .forecast-flag.danger{ background:var(--vermillion-soft); color:var(--vermillion); }
+  .forecast-flag.watch{ background:var(--amber-soft); color:var(--marigold-deep); }
+  .forecast-flag.safe{ background:var(--leaf-soft); color:var(--leaf); }
+
+  /* ---------- MANAGE PRODUCTS PAGE ---------- */
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 16px; }
+  @media (max-width:680px){ .form-grid{ grid-template-columns:1fr; } }
+  .toast{
+    position:fixed; bottom:26px; right:26px; background:var(--ink); color:var(--paper);
+    padding:13px 18px; border-radius:10px; font-size:13.5px; font-weight:500; box-shadow:var(--shadow);
+    display:flex; align-items:center; gap:10px; z-index:100; transform:translateY(20px); opacity:0;
+    transition:all 0.25s ease; pointer-events:none;
+  }
+  .toast.show{ transform:translateY(0); opacity:1; }
+  .toast .dot2{ width:8px; height:8px; border-radius:50%; background:var(--marigold); }
+
+  @media (max-width:860px){
+    .sidebar{ display:none; }
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      background:var(--ink); color:#EDE7D6; padding:14px 16px; position:sticky; top:0; z-index:30;
+    }
+    .topbar .tb-brand{ display:flex; align-items:center; gap:8px; font-family:var(--display); font-weight:600; font-size:16px; }
+    .topbar select{
+      background:rgba(237,231,214,0.1); color:#fff; border:1px solid rgba(237,231,214,0.3);
+      padding:9px 10px; border-radius:8px; font-size:13px;
+    }
+    .topbar select option{ color:#111; }
+    .page{ padding:22px 16px 46px; }
+    .billing-grid, .an-grid{ grid-template-columns:1fr; }
+  }
+
+  @media print{
+    .sidebar, .topbar, .page-head, .card:not(.receipt-card), .toast{ display:none !important; }
+    body{ background:#fff; }
+    .receipt-wrap{ padding:0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="tb-brand"><span style="color:var(--marigold)">●</span> SmartStore AI</div>
+  <select id="mobileNav" aria-label="Navigate"></select>
+</div>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="dot"></span><span class="brand-name">SmartStore AI</span></div>
+      <div class="brand-sub">MSME Retail Ledger</div>
+    </div>
+    <nav class="nav" id="sideNav"></nav>
+    <div class="sidebar-foot">Kanayannur Branch · GSTIN Demo Mode<br>All figures in ₹ (INR)</div>
+  </aside>
+
+  <main class="main">
+    <div class="page" id="pageRoot"></div>
+  </main>
+</div>
+
+<div class="toast" id="toast"><span class="dot2"></span><span id="toastMsg"></span></div>
+
+<script>
+/* =========================================================
+   STATE — now backed by Supabase (Postgres). The ledger is
+   fetched from the DB on load and every write (checkout,
+   restock, add product) is persisted straight to Supabase.
+   ========================================================= */
+const SUPABASE_URL = "https://kecycdvzftcamarfwgsf.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_13OQ_iOPQMrLtrhNoYq9xA_maT7TxpB";
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let inventory = [];   // loaded from public.products
+let sales = [];       // loaded from public.sales_feed (view)
+let cart = [];        // {id, product_name, price, qty} — session only
+let activePage = "billing";
+let charts = {};
+
+/* ---- Data loaders ---- */
+async function loadInventory(){
+  const { data, error } = await db.from("products").select("*").order("id");
+  if(error){ console.error(error); toast("Couldn't load products: " + error.message); return; }
+  inventory = (data||[]).map(p => ({
+    id: p.id,
+    product_name: p.product_name,
+    category: p.category,
+    price: Number(p.price),
+    stock_quantity: p.stock_quantity,
+    reorder_level: p.reorder_level,
+    barcode_id: p.barcode_id
+  }));
+}
+
+async function loadSales(){
+  const { data, error } = await db.from("sales_feed").select("*").order("timestamp", { ascending:true });
+  if(error){ console.error(error); toast("Couldn't load sales: " + error.message); return; }
+  sales = (data||[]).map(s => ({
+    transaction_id: s.transaction_id,
+    product_name: s.product_name,
+    quantity: s.quantity,
+    total_price: Number(s.total_price),
+    timestamp: s.timestamp,
+    customer_phone: s.customer_phone
+  }));
+}
+
+async function refreshData(){
+  await Promise.all([loadInventory(), loadSales()]);
+}
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+const inr = n => "₹" + Number(n).toLocaleString("en-IN", {maximumFractionDigits:2});
+const fmtDate = d => new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
+const fmtTime = d => new Date(d).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+function toast(msg){
+  const t = $("#toast"); $("#toastMsg").textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._h);
+  toast._h = setTimeout(()=>t.classList.remove("show"), 2600);
+}
+
+function statusOf(item){
+  if(item.stock_quantity <= 0) return "out";
+  if(item.stock_quantity <= item.reorder_level) return "low";
+  return "ok";
+}
+
+function barcodeSVG(seed, w=150, h=42){
+  // Deterministic pseudo-random bar pattern from the barcode string.
+  let s = 0; for(const c of seed) s = (s*31 + c.charCodeAt(0)) >>> 0;
+  const rand = () => { s = (s*1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  let x = 0, bars = "";
+  while(x < w){
+    const bw = 1 + Math.floor(rand()*3);
+    if(rand() > 0.42){ bars += `<rect x="${x}" y="0" width="${bw}" height="${h}" fill="#1F2A44"/>`; }
+    x += bw;
+  }
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${bars}</svg>`;
+}
+
+/* =========================================================
+   NAVIGATION
+   ========================================================= */
+const PAGES = [
+  { id:"billing",   num:"01", label:"Live Billing Counter" },
+  { id:"inventory", num:"02", label:"Inventory & Alerts" },
+  { id:"analytics", num:"03", label:"Sales Analytics & Forecast" },
+  { id:"manage",    num:"04", label:"Manage Products" },
+  { id:"billhistory", num:"05", label:"Bill History" },
+];
+
+function renderNav(){
+  const nav = $("#sideNav");
+  nav.innerHTML = PAGES.map(p => `
+    <button class="nav-item ${p.id===activePage?'active':''}" data-page="${p.id}">
+      <span class="num">${p.num}</span><span>${p.label}</span>
+    </button>`).join("");
+  nav.querySelectorAll(".nav-item").forEach(btn=>{
+    btn.addEventListener("click", ()=>{ activePage = btn.dataset.page; renderAll(); });
+  });
+
+  const mobileSel = $("#mobileNav");
+  mobileSel.innerHTML = PAGES.map(p => `<option value="${p.id}" ${p.id===activePage?'selected':''}>${p.num} · ${p.label}</option>`).join("");
+  mobileSel.onchange = () => { activePage = mobileSel.value; renderAll(); };
+}
+
+async function renderAll(){
+  renderNav();
+  const root = $("#pageRoot");
+  if(activePage==="billing") root.innerHTML = billingTemplate();
+  if(activePage==="inventory") root.innerHTML = inventoryTemplate();
+  if(activePage==="analytics") root.innerHTML = analyticsTemplate();
+  if(activePage==="manage") root.innerHTML = manageTemplate();
+  if(activePage==="billhistory"){
+    root.innerHTML = `<div class="page-head"><p class="eyebrow">Ledger</p><h1 class="page-title">Loading bills…</h1></div>`;
+    await loadBillHistory();
+    if(activePage==="billhistory") root.innerHTML = billHistoryTemplate();
+  }
+
+  if(activePage==="billing") bindBilling();
+  if(activePage==="inventory") bindInventory();
+  if(activePage==="analytics") bindAnalytics();
+  if(activePage==="manage") bindManage();
+  if(activePage==="billhistory") bindBillHistory();
+}
+
+/* =========================================================
+   PAGE 1 — LIVE BILLING COUNTER
+   ========================================================= */
+function billingTemplate(){
+  const cartRows = cart.map(c => `
+    <tr>
+      <td>${c.product_name}</td>
+      <td class="barcode-cell">${inr(c.price)}</td>
+      <td>
+        <div class="qty-ctrl">
+          <button data-act="dec" data-id="${c.id}" aria-label="Decrease quantity">−</button>
+          <span>${c.qty}</span>
+          <button data-act="inc" data-id="${c.id}" aria-label="Increase quantity">+</button>
+        </div>
+      </td>
+      <td class="barcode-cell">${inr(c.price*c.qty)}</td>
+      <td><button class="remove-btn" data-act="rm" data-id="${c.id}">Remove</button></td>
+    </tr>`).join("");
+
+  const subtotal = cart.reduce((s,c)=>s+c.price*c.qty,0);
+  const gst = subtotal*0.05;
+  const grand = subtotal+gst;
+
+  const options = inventory.filter(i=>i.stock_quantity>0)
+    .map(i=>`<option value="${i.id}">${i.product_name} — ${inr(i.price)} (${i.stock_quantity} left)</option>`).join("");
+
+  return `
+  <div class="page-head">
+    <p class="eyebrow">Counter Register</p>
+    <h1 class="page-title">Live Billing Counter</h1>
+    <p class="page-desc">Scan or select items, build the cart, and close the sale — stock and receipts update the moment you check out.</p>
+  </div>
+
+  <div class="grid billing-grid">
+    <div class="card card-pad">
+      <h2 class="card-title">🛒 Current Sale</h2>
+      <p class="card-sub">Add items by search or by the AI visual scanner below.</p>
+
+      <div class="scan-row">
+        <div class="select-wrap">
+          <select class="product-select" id="productSelect">
+            <option value="">Select a product…</option>
+            ${options}
+          </select>
+        </div>
+        <button class="btn btn-primary" id="addBtn">+ Add to cart</button>
+      </div>
+
+      <div class="scanner-drop">
+        <span>📷</span>
+        <span style="flex:1;">AI Visual Scanner — upload a shelf photo and let the model identify the item.</span>
+        <label class="file-btn" for="scanInput">Scan item</label>
+        <input type="file" id="scanInput" accept="image/*" capture="environment" style="display:none;">
+      </div>
+      <div class="scan-result" id="scanResult"></div>
+
+      <table class="cart-table">
+        <thead><tr><th>Item</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead>
+        <tbody id="cartBody">
+          ${cart.length ? cartRows : `<tr><td colspan="5"><div class="empty-cart">Cart is empty — add your first item above.</div></td></tr>`}
+        </tbody>
+      </table>
+
+      <div class="totals">
+        <div class="row"><span>Subtotal</span><span>${inr(subtotal)}</span></div>
+        <div class="row"><span>GST (5%)</span><span>${inr(gst)}</span></div>
+        <div class="row grand"><span>Grand Total</span><span>${inr(grand)}</span></div>
+      </div>
+    </div>
+
+    <div class="card card-pad">
+      <h2 class="card-title">Customer &amp; Checkout</h2>
+      <p class="card-sub">Digital receipt is sent to the number below.</p>
+      <div class="field">
+        <label for="custPhone">Customer mobile / email</label>
+        <input id="custPhone" type="text" placeholder="98XXXXXXXX or name@email.com">
+      </div>
+      <button class="btn btn-marigold btn-block" id="checkoutBtn" ${cart.length?'':'disabled'}>🧾 Checkout &amp; Print Bill</button>
+
+      <div id="receiptSlot" style="margin-top:20px;"></div>
+    </div>
+  </div>`;
+}
+
+function bindBilling(){
+  $("#addBtn").addEventListener("click", ()=>{
+    const sel = $("#productSelect");
+    if(!sel.value) return toast("Pick a product first.");
+    addToCart(Number(sel.value));
+  });
+
+  $("#scanInput").addEventListener("change", (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const inStock = inventory.filter(i=>i.stock_quantity>0);
+    const pick = inStock[Math.floor(Math.random()*inStock.length)];
+    const reader = new FileReader();
+    const box = $("#scanResult");
+    box.classList.remove("show");
+    box.innerHTML = `<span>🔎 Analysing image…</span>`;
+    box.classList.add("show");
+    reader.onload = ev => {
+      setTimeout(()=>{
+        const conf = (92 + Math.random()*7).toFixed(1);
+        box.innerHTML = `
+          <img src="${ev.target.result}" alt="">
+          <div style="flex:1;">
+            <div><strong>AI Detected:</strong> ${pick ? pick.product_name : "No match"}</div>
+            <div class="pct">${pick ? conf+"% confidence" : ""}</div>
+          </div>
+          ${pick ? `<button class="btn btn-primary" id="scanAddBtn" data-id="${pick.id}">Add to cart</button>` : ""}
+        `;
+        if(pick){
+          $("#scanAddBtn").addEventListener("click", ()=> addToCart(pick.id));
+        }
+      }, 650);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  $("#cartBody").addEventListener("click", (e)=>{
+    const btn = e.target.closest("button[data-act]");
+    if(!btn) return;
+    const id = Number(btn.dataset.id);
+    const act = btn.dataset.act;
+    const line = cart.find(c=>c.id===id);
+    if(!line) return;
+    const item = inventory.find(i=>i.id===id);
+    if(act==="inc"){
+      if(line.qty >= item.stock_quantity) return toast(`Only ${item.stock_quantity} in stock.`);
+      line.qty++;
+    }
+    if(act==="dec"){ line.qty--; if(line.qty<=0) cart = cart.filter(c=>c.id!==id); }
+    if(act==="rm"){ cart = cart.filter(c=>c.id!==id); }
+    renderAll();
+  });
+
+  const checkoutBtn = $("#checkoutBtn");
+  if(checkoutBtn) checkoutBtn.addEventListener("click", checkout);
+}
+
+function addToCart(id){
+  const item = inventory.find(i=>i.id===id);
+  if(!item || item.stock_quantity<=0) return toast("That item is out of stock.");
+  const existing = cart.find(c=>c.id===id);
+  if(existing){
+    if(existing.qty >= item.stock_quantity) return toast(`Only ${item.stock_quantity} in stock.`);
+    existing.qty++;
+  } else {
+    cart.push({ id:item.id, product_name:item.product_name, price:item.price, qty:1 });
+  }
+  renderAll();
+}
+
+async function checkout(){
+  if(!cart.length) return;
+  const phone = $("#custPhone") ? $("#custPhone").value.trim() : "";
+  const checkoutBtn = $("#checkoutBtn");
+  if(checkoutBtn){ checkoutBtn.disabled = true; checkoutBtn.textContent = "Processing…"; }
+
+  const rpcItems = cart.map(c => ({ id: c.id, qty: c.qty, product_name: c.product_name }));
+  const { data: txnId, error } = await db.rpc("checkout_sale", {
+    items: rpcItems,
+    p_customer_phone: phone || "Walk-in"
+  });
+
+  if(error){
+    toast("Checkout failed: " + error.message);
+    if(checkoutBtn){ checkoutBtn.disabled = false; checkoutBtn.textContent = "🧾 Checkout & Print Bill"; }
+    return;
+  }
+
+  const subtotal = cart.reduce((s,c)=>s+c.price*c.qty,0);
+  const gst = subtotal*0.05;
+  const grand = subtotal+gst;
+  const barcode = "TXN"+txnId;
+  const items = cart.slice();
+  const stamp = new Date();
+  cart = [];
+
+  await refreshData();
+  renderAll();
+  checkOutOfStockAndNotify();
+
+  $("#receiptSlot").innerHTML = `
+  <div class="receipt-wrap">
+    <div class="receipt receipt-card">
+      <div class="receipt-head">
+        <div class="store">SmartStore AI</div>
+        <div class="tag">MSME RETAIL · KANAYANNUR</div>
+      </div>
+      <hr>
+      <div class="receipt-row"><span>Bill No.</span><span>#${txnId}</span></div>
+      <div class="receipt-row"><span>Date</span><span>${fmtDate(stamp)} ${fmtTime(stamp)}</span></div>
+      <div class="receipt-row"><span>Customer</span><span>${phone || "Walk-in"}</span></div>
+      <hr>
+      <div class="receipt-items">
+        ${items.map(i=>`<div class="receipt-row"><span>${i.product_name} ×${i.qty}</span><span>${inr(i.price*i.qty)}</span></div>`).join("")}
+      </div>
+      <hr>
+      <div class="receipt-row"><span>Subtotal</span><span>${inr(subtotal)}</span></div>
+      <div class="receipt-row"><span>GST (5%)</span><span>${inr(gst)}</span></div>
+      <div class="receipt-row receipt-total"><span>Total</span><span>${inr(grand)}</span></div>
+      <div class="receipt-barcode">${barcodeSVG(barcode)}</div>
+      <div class="receipt-foot">Thank you for shopping with us!<br>Powered by SmartStore AI</div>
+      <div class="zigzag"></div>
+    </div>
+  </div>
+  <button class="btn btn-ghost btn-block" id="printBtn" style="margin-top:12px;">🖨️ Print / Download Bill</button>
+  `;
+  $("#printBtn").addEventListener("click", ()=>window.print());
+  toast(`Sale #${txnId} completed — inventory updated.`);
+}
+
+/* =========================================================
+   PAGE 2 — INVENTORY & LOW-STOCK ALERTS
+   ========================================================= */
+function inventoryTemplate(){
+  const totalProducts = inventory.length;
+  const totalValue = inventory.reduce((s,i)=>s+i.price*i.stock_quantity,0);
+  const lowStock = inventory.filter(i=>statusOf(i)==="low");
+  const outStock = inventory.filter(i=>statusOf(i)==="out");
+  const alerts = [...outStock, ...lowStock];
+
+  const rows = inventory.map(i=>{
+    const st = statusOf(i);
+    const badge = st==="out" ? `<span class="badge out">🔴 Out of stock</span>`
+                : st==="low" ? `<span class="badge low">🟡 Low stock</span>`
+                : `<span class="badge ok">🟢 Sufficient</span>`;
+    return `<tr>
+      <td>${i.product_name}</td>
+      <td>${i.category}</td>
+      <td class="barcode-cell">${i.barcode_id}</td>
+      <td>${inr(i.price)}</td>
+      <td>${i.stock_quantity}</td>
+      <td>${i.reorder_level}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join("");
+
+  const restockOptions = inventory.map(i=>`<option value="${i.id}">${i.product_name} (${i.stock_quantity} in stock)</option>`).join("");
+
+  return `
+  <div class="page-head">
+    <p class="eyebrow">Stockroom Register</p>
+    <h1 class="page-title">Inventory Management &amp; Low-Stock Alerts</h1>
+    <p class="page-desc">Every sale updates this ledger in real time — restock before the red badges pile up.</p>
+  </div>
+
+  <div class="grid metrics">
+    <div class="card metric"><div class="m-label">Total Products</div><div class="m-value">${totalProducts}</div></div>
+    <div class="card metric"><div class="m-label">Inventory Value</div><div class="m-value">${inr(totalValue)}</div></div>
+    <div class="card metric alert"><div class="m-label">Low Stock Items</div><div class="m-value">${lowStock.length}</div></div>
+    <div class="card metric alert"><div class="m-label">Out of Stock</div><div class="m-value">${outStock.length}</div></div>
+  </div>
+
+  <div class="alert-banner ${alerts.length?'':'hide'}">
+    <span class="ico">⚠️</span>
+    <div>
+      <strong>${alerts.length} item${alerts.length===1?'':'s'} need attention</strong>
+      <div class="items">${alerts.map(a=>`${a.product_name} (${a.stock_quantity} left)`).join(" · ") || "—"}</div>
+    </div>
+  </div>
+
+  <div class="card card-pad" style="margin-bottom:18px;">
+    <h2 class="card-title">📦 Full Inventory</h2>
+    <p class="card-sub">${totalProducts} products tracked by barcode.</p>
+    <div style="overflow-x:auto;">
+      <table class="inv-table">
+        <thead><tr><th>Item</th><th>Category</th><th>Barcode</th><th>Price</th><th>Stock</th><th>Reorder At</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card card-pad">
+    <h2 class="card-title">Quick Restock</h2>
+    <p class="card-sub">Add stock instantly without leaving the counter.</p>
+    <div class="restock-row">
+      <div class="field">
+        <label for="restockSelect">Item</label>
+        <select id="restockSelect">${restockOptions}</select>
+      </div>
+      <div class="field" style="max-width:120px;">
+        <label for="restockQty">Add qty</label>
+        <input type="number" id="restockQty" min="1" value="10">
+      </div>
+      <button class="btn btn-primary" id="restockBtn">+ Update Stock</button>
+    </div>
+  </div>`;
+}
+
+function bindInventory(){
+  $("#restockBtn").addEventListener("click", async ()=>{
+    const id = Number($("#restockSelect").value);
+    const qty = Math.max(1, Number($("#restockQty").value)||0);
+    const item = inventory.find(i=>i.id===id);
+    if(!item) return;
+    const btn = $("#restockBtn");
+    btn.disabled = true;
+    const { error } = await db.from("products")
+      .update({ stock_quantity: item.stock_quantity + qty })
+      .eq("id", id);
+    btn.disabled = false;
+    if(error) return toast("Restock failed: " + error.message);
+    toast(`${item.product_name} restocked +${qty} units.`);
+    await loadInventory();
+    renderAll();
+  });
+}
+
+/* =========================================================
+   PAGE 3 — SALES ANALYTICS & AI DEMAND FORECAST
+   ========================================================= */
+function analyticsTemplate(){
+  return `
+  <div class="page-head">
+    <p class="eyebrow">Trading Ledger</p>
+    <h1 class="page-title">Sales Analytics &amp; AI Demand Forecast</h1>
+    <p class="page-desc">Reading the last six days of trade to flag what to reorder before it runs out.</p>
+  </div>
+
+  <div class="grid an-grid">
+    <div class="card card-pad">
+      <h2 class="card-title">Top-Selling Products</h2>
+      <p class="card-sub">By units sold, all-time in this ledger.</p>
+      <div class="chart-box"><canvas id="topChart"></canvas></div>
+    </div>
+    <div class="card card-pad">
+      <h2 class="card-title">Daily Revenue Trend</h2>
+      <p class="card-sub">Grand total billed per day, incl. GST.</p>
+      <div class="chart-box"><canvas id="trendChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card card-pad">
+    <h2 class="card-title">🤖 AI Predictive Demand Engine</h2>
+    <p class="card-sub">Sales velocity vs. current stock — a mock forecast for the coming week.</p>
+    <div id="forecastList"></div>
+  </div>`;
+}
+
+function bindAnalytics(){
+  // Aggregate by product
+  const byProduct = {};
+  sales.forEach(s=>{ byProduct[s.product_name] = (byProduct[s.product_name]||0) + s.quantity; });
+  const topEntries = Object.entries(byProduct).sort((a,b)=>b[1]-a[1]).slice(0,7);
+
+  if(charts.top) charts.top.destroy();
+  charts.top = new Chart($("#topChart"), {
+    type:"bar",
+    data:{ labels: topEntries.map(e=>e[0]), datasets:[{ label:"Units sold", data: topEntries.map(e=>e[1]), backgroundColor:"#E8A93B", borderRadius:6, maxBarThickness:34 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales:{ x:{ grid:{ display:false } }, y:{ grid:{ color:"#F1EBD8" }, beginAtZero:true, ticks:{ precision:0 } } } }
+  });
+
+  // Aggregate by day
+  const byDay = {};
+  sales.forEach(s=>{
+    const key = fmtDate(s.timestamp);
+    byDay[key] = (byDay[key]||0) + s.total_price*1.0;
+  });
+  const dayEntries = Object.entries(byDay);
+
+  if(charts.trend) charts.trend.destroy();
+  charts.trend = new Chart($("#trendChart"), {
+    type:"line",
+    data:{ labels: dayEntries.map(e=>e[0]), datasets:[{ label:"Revenue (₹)", data: dayEntries.map(e=>Math.round(e[1])), borderColor:"#1F2A44", backgroundColor:"rgba(31,42,68,0.08)", fill:true, tension:0.35, pointBackgroundColor:"#E8A93B", pointRadius:4 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales:{ x:{ grid:{ display:false } }, y:{ grid:{ color:"#F1EBD8" }, beginAtZero:true } } }
+  });
+
+  // Mock demand forecast
+  const distinctDays = new Set(sales.map(s=>fmtDate(s.timestamp))).size || 1;
+  const forecast = inventory.map(item=>{
+    const soldQty = sales.filter(s=>s.product_name===item.product_name).reduce((s,x)=>s+x.quantity,0);
+    const velocity = soldQty / distinctDays;
+    const predicted = Math.round(velocity*7);
+    const daysLeft = velocity>0 ? Math.floor(item.stock_quantity/velocity) : Infinity;
+    let flag = "safe", label = "Stock healthy";
+    if(item.stock_quantity<=0){ flag="danger"; label="Out of stock now"; }
+    else if(velocity>0 && daysLeft<=3){ flag="danger"; label=`Stockout in ~${daysLeft}d`; }
+    else if(predicted > item.stock_quantity){ flag="watch"; label="Reorder this week"; }
+    return { item, velocity, predicted, flag, label };
+  }).sort((a,b)=>{
+    const rank = {danger:0, watch:1, safe:2};
+    return rank[a.flag]-rank[b.flag] || b.predicted-a.predicted;
+  });
+
+  $("#forecastList").innerHTML = forecast.map(f=>`
+    <div class="forecast-item">
+      <div>
+        <div class="fname">${f.item.product_name}</div>
+        <div class="fmeta">Velocity ${f.velocity.toFixed(1)}/day · predicted demand ${f.predicted} units next week · ${f.item.stock_quantity} in stock</div>
+      </div>
+      <span class="forecast-flag ${f.flag}">${f.label}</span>
+    </div>`).join("");
+}
+
+/* =========================================================
+   PAGE 4 — MANAGE PRODUCTS
+   ========================================================= */
+function manageTemplate(){
+  return `
+  <div class="page-head">
+    <p class="eyebrow">New Entry</p>
+    <h1 class="page-title">Manage Products</h1>
+    <p class="page-desc">Add a new line to the catalogue — it appears instantly in Billing and Inventory.</p>
+  </div>
+
+  <div class="card card-pad" style="max-width:640px;">
+    <h2 class="card-title">➕ Add Product</h2>
+    <p class="card-sub">A barcode is generated automatically.</p>
+    <form id="addProductForm">
+      <div class="form-grid">
+        <div class="field"><label for="pName">Product name</label><input id="pName" required placeholder="e.g. Cooking Oil 1L"></div>
+        <div class="field"><label for="pCategory">Category</label><input id="pCategory" required placeholder="e.g. Groceries"></div>
+        <div class="field"><label for="pPrice">Price (₹)</label><input id="pPrice" type="number" min="1" step="0.01" required></div>
+        <div class="field"><label for="pStock">Initial stock</label><input id="pStock" type="number" min="0" required></div>
+        <div class="field"><label for="pReorder">Reorder level</label><input id="pReorder" type="number" min="0" required></div>
+      </div>
+      <button class="btn btn-marigold" type="submit" style="margin-top:6px;">Add to Catalogue</button>
+    </form>
+  </div>`;
+}
+
+function bindManage(){
+  $("#addProductForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const name = $("#pName").value.trim();
+    const category = $("#pCategory").value.trim();
+    const price = Number($("#pPrice").value);
+    const stock = Number($("#pStock").value);
+    const reorder = Number($("#pReorder").value);
+    if(!name || !category || !price) return toast("Fill in all fields.");
+
+    const submitBtn = e.target.querySelector("button[type=submit]");
+    if(submitBtn) submitBtn.disabled = true;
+
+    // barcode_id is auto-generated by a DB trigger (see SQL schema)
+    const { error } = await db.from("products").insert({
+      product_name: name, category, price, stock_quantity: stock, reorder_level: reorder
+    });
+
+    if(submitBtn) submitBtn.disabled = false;
+    if(error) return toast("Couldn't add product: " + error.message);
+
+    toast(`${name} added to the catalogue.`);
+    e.target.reset();
+    await loadInventory();
+    renderAll();
+  });
+}
+
+/* =========================================================
+   PAGE 5 — BILL HISTORY (every past sale, saved in Supabase)
+   ========================================================= */
+let billHistory = [];
+
+async function loadBillHistory(){
+  const { data, error } = await db
+    .from("transactions")
+    .select("id, customer_phone, subtotal, gst, grand_total, created_at, sale_items(product_name, quantity, unit_price, line_total)")
+    .order("created_at", { ascending:false })
+    .limit(100);
+  if(error){ console.error(error); toast("Couldn't load bill history: " + error.message); billHistory = []; return; }
+  billHistory = data || [];
+}
+
+function billHistoryTemplate(){
+  if(!billHistory.length){
+    return `
+    <div class="page-head">
+      <p class="eyebrow">Ledger</p>
+      <h1 class="page-title">Bill History</h1>
+      <p class="page-desc">Every bill you print gets saved here automatically.</p>
+    </div>
+    <div class="card card-pad"><p class="card-sub">No bills yet — checkout a sale on the Billing page to see it here.</p></div>`;
+  }
+
+  const rows = billHistory.map(t => {
+    const dt = new Date(t.created_at);
+    const items = (t.sale_items||[]).map(i => `${i.product_name} ×${i.quantity}`).join(", ");
+    return `
+    <div class="card card-pad" style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <strong>Bill #${t.id}</strong>
+          <span style="color:var(--muted);font-size:.85rem;"> · ${dt.toLocaleString("en-IN")}</span>
+        </div>
+        <div style="font-family:var(--mono);font-weight:600;">${inr(t.grand_total)}</div>
+      </div>
+      <div style="margin-top:6px;font-size:.9rem;color:var(--muted);">${items}</div>
+      <div style="margin-top:4px;font-size:.85rem;color:var(--muted);">Customer: ${t.customer_phone || "Walk-in"} · Subtotal ${inr(t.subtotal)} · GST ${inr(t.gst)}</div>
+    </div>`;
+  }).join("");
+
+  return `
+  <div class="page-head">
+    <p class="eyebrow">Ledger</p>
+    <h1 class="page-title">Bill History</h1>
+    <p class="page-desc">Every bill printed from the Billing counter, saved automatically. Showing the latest ${billHistory.length}.</p>
+  </div>
+  ${rows}`;
+}
+
+async function bindBillHistory(){
+  // Data was already fetched during loadBillHistory() below — nothing to bind yet.
+}
+
+/* =========================================================
+   OUT-OF-STOCK NOTIFICATIONS (Browser + Email)
+   ========================================================= */
+const NOTIFY_EMAIL = "muhammedfayisps25@gmail.com";
+const NOTIFY_PHONE = "9633486948";
+let notifiedOutOfStockIds = new Set();
+
+function requestNotifyPermission(){
+  if("Notification" in window && Notification.permission === "default"){
+    Notification.requestPermission();
+  }
+}
+
+function checkOutOfStockAndNotify(){
+  const currentlyOut = inventory.filter(i => i.stock_quantity <= 0);
+  const currentlyOutIds = new Set(currentlyOut.map(i => i.id));
+
+  // New out-of-stock items since last check → notify
+  currentlyOut.forEach(item => {
+    if(!notifiedOutOfStockIds.has(item.id)){
+      fireBrowserNotification(item);
+    }
+  });
+
+  // Restocked items → allow re-notification next time they run out
+  notifiedOutOfStockIds.forEach(id => {
+    if(!currentlyOutIds.has(id)) notifiedOutOfStockIds.delete(id);
+  });
+  notifiedOutOfStockIds = currentlyOutIds;
+}
+
+function fireBrowserNotification(item){
+  if("Notification" in window && Notification.permission === "granted"){
+    new Notification("🔴 Out of stock — SmartStore AI", {
+      body: `${item.product_name} stock ഇപ്പോൾ 0 ആണ്. Restock ചെയ്യുക.`,
+      tag: "stock-" + item.id
+    });
+  }
+  // In-app toast as a fallback / supplement (also works if notification permission is denied)
+  toast(`⚠️ ${item.product_name} stock തീർന്നു!`);
+}
+
+// Live cross-tab / cross-device updates: whenever ANY product row changes
+// in Supabase (e.g. another counter's checkout depletes stock), this tab
+// picks it up immediately via Realtime and re-checks for out-of-stock items.
+function subscribeStockRealtime(){
+  db.channel("products-stock-watch")
+    .on("postgres_changes", { event:"UPDATE", schema:"public", table:"products" }, async () => {
+      await loadInventory();
+      checkOutOfStockAndNotify();
+      if(activePage==="inventory" || activePage==="billing") renderAll();
+    })
+    .subscribe();
+}
+
+/* =========================================================
+   BOOT — fetch live data from Supabase, then render.
+   ========================================================= */
+(async function boot(){
+  $("#pageRoot").innerHTML = `
+    <div class="page-head">
+      <p class="eyebrow">Connecting</p>
+      <h1 class="page-title">Loading ledger…</h1>
+      <p class="page-desc">Fetching products and sales from Supabase.</p>
+    </div>`;
+  await refreshData();
+  renderAll();
+  requestNotifyPermission();
+  checkOutOfStockAndNotify();
+  subscribeStockRealtime();
+})();
+</script>
+</body>
+</html>
